@@ -1,7 +1,17 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import MapView, { LongPressEvent, Marker as MapMarker, PROVIDER_DEFAULT } from 'react-native-maps';
+
+// Глобальные массивы
+declare global {
+  var ALL_MARKERS: any[];
+  var ALL_MARKER_IMAGES: any[];
+}
+
+// Инициализация глобальных переменных
+if (!global.ALL_MARKERS) global.ALL_MARKERS = [];
+if (!global.ALL_MARKER_IMAGES) global.ALL_MARKER_IMAGES = [];
 
 interface MapMarker {
   id: string;
@@ -14,20 +24,26 @@ export default function MapScreen() {
   const router = useRouter();
   const [markers, setMarkers] = useState<MapMarker[]>([]);
 
+  // Загружаем маркеры при старте
+  useEffect(() => {
+    setMarkers(global.ALL_MARKERS);
+  }, []);
+
   // Обработчик долгого нажатия на карту
   const handleMapLongPress = (event: LongPressEvent) => {
     const { coordinate } = event.nativeEvent;
     
-    // Создание нового объека маркера
+    // Создание нового объекта маркера
     const newMarker: MapMarker = {
       id: Date.now().toString(),
       latitude: coordinate.latitude,
       longitude: coordinate.longitude,
-      title: `Метка ${markers.length + 1}`
+      title: `Метка ${global.ALL_MARKERS.length + 1}`
     };
 
-    // Добавляем новый маркер в массив
-    setMarkers(prev => [...prev, newMarker]);
+    // Добавляем в глобальный массив и обновляем состояние
+    global.ALL_MARKERS.push(newMarker);
+    setMarkers([...global.ALL_MARKERS]);
 
     Alert.alert(
       'Метка добавлена', 
@@ -36,7 +52,7 @@ export default function MapScreen() {
     );
   };
 
-   // Переходим на экран деталей маркера
+  // Переходим на экран деталей маркера
   const handleMarkerPress = (marker: MapMarker) => {
     router.push({
       pathname: '/marker/[id]',
@@ -44,6 +60,7 @@ export default function MapScreen() {
         id: marker.id,
         latitude: marker.latitude,
         longitude: marker.longitude,
+        title: marker.title,
       },
     });
   };
@@ -54,7 +71,7 @@ export default function MapScreen() {
         style={styles.map}
         provider={PROVIDER_DEFAULT}
         initialRegion={{
-          latitude: 58.0105, // Пермь
+          latitude: 58.0105,
           longitude: 56.2502,
           latitudeDelta: 0.0922,
           longitudeDelta: 0.0421,
@@ -88,7 +105,6 @@ export default function MapScreen() {
   );
 }
 
-//Стили
 const styles = StyleSheet.create({
   container: {
     flex: 1,

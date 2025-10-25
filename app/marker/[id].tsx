@@ -1,63 +1,66 @@
-// app/marker/[id].tsx
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { MarkerImage } from '../../types';
 
+// Глобальные массивы
+declare global {
+  var ALL_MARKERS: any[];
+  var ALL_MARKER_IMAGES: any[];
+}
+
+// Инициализация глобальных переменных
+if (!global.ALL_MARKERS) global.ALL_MARKERS = [];
+if (!global.ALL_MARKER_IMAGES) global.ALL_MARKER_IMAGES = [];
+
+// Компонент экрана деталей маркера
 export default function MarkerDetailScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
-  const [images, setImages] = useState<MarkerImage[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [images, setImages] = useState<any[]>([]);
+  const [markerTitle, setMarkerTitle] = useState('');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
 
   const markerId = params.id as string;
   const latitude = parseFloat(params.latitude as string);
   const longitude = parseFloat(params.longitude as string);
+  const initialTitle = params.title as string;
 
+  // Загружаем данные при открытии экрана
   useEffect(() => {
-    loadImages();
-  }, [markerId]);
+    // Загружаем изображения
+    const markerImages = global.ALL_MARKER_IMAGES.filter(img => img.markerId === markerId);
+    setImages(markerImages);
+    
+    // Загружаем название метки
+    const marker = global.ALL_MARKERS.find(m => m.id === markerId);
+    setMarkerTitle(marker?.title || initialTitle || 'Метка');
+  }, [markerId, initialTitle]);
 
-  const loadImages = async () => {
-    // В реальном приложении здесь была бы загрузка из хранилища
-    // Для демонстрации используем локальное состояние
-    setLoading(false);
-  };
-
-  const requestPermission = async (): Promise<boolean> => {
+  const handleAddImage = async () => {
     try {
+      // Запрашиваем разрешение
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
           'Разрешение требуется',
-          'Для добавления фото необходимо разрешение на доступ к галерее.',
-          [{ text: 'OK' }]
+          'Для добавления фото необходимо разрешение на доступ к галерее.'
         );
-        return false;
+        return;
       }
-      return true;
-    } catch (error) {
-      console.error('Ошибка запроса разрешения:', error);
-      Alert.alert('Ошибка', 'Не удалось запросить разрешение для доступа к галерее.');
-      return false;
-    }
-  };
 
-  const handleAddImage = async () => {
-    try {
-      const hasPermission = await requestPermission();
-      if (!hasPermission) return;
-
+      // Открываем выбор изображения
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -66,13 +69,17 @@ export default function MarkerDetailScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const newImage: MarkerImage = {
+        const newImage = {
           id: Date.now().toString(),
           uri: result.assets[0].uri,
-          markerId,
+          markerId: markerId,
           createdAt: new Date(),
         };
 
+        // Добавляем в глобальный массив
+        global.ALL_MARKER_IMAGES.push(newImage);
+        
+        // Обновляем локальное состояние
         setImages(prev => [...prev, newImage]);
         
         Alert.alert('Успех', 'Изображение успешно добавлено!');
@@ -93,11 +100,42 @@ export default function MarkerDetailScreen() {
           text: 'Удалить',
           style: 'destructive',
           onPress: () => {
+            // Удаляем из глобального массива
+            global.ALL_MARKER_IMAGES = global.ALL_MARKER_IMAGES.filter(img => img.id !== imageId);
+            
+            // Обновляем локальное состояние
             setImages(prev => prev.filter(img => img.id !== imageId));
           },
         },
       ]
     );
+  };
+
+  const handleEditTitle = () => {
+    setNewTitle(markerTitle);
+    setIsEditingTitle(true);
+  };
+
+  const handleSaveTitle = () => {
+    if (newTitle.trim() === '') {
+      Alert.alert('Ошибка', 'Название не может быть пустым');
+      return;
+    }
+
+    // Обновляем в глобальном массиве маркеров
+    const markerIndex = global.ALL_MARKERS.findIndex(m => m.id === markerId);
+    if (markerIndex !== -1) {
+      global.ALL_MARKERS[markerIndex].title = newTitle.trim();
+    }
+
+    setMarkerTitle(newTitle.trim());
+    setIsEditingTitle(false);
+    Alert.alert('Успех', 'Название метки обновлено!');
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingTitle(false);
+    setNewTitle('');
   };
 
   const handleBack = () => {
@@ -117,14 +155,15 @@ export default function MarkerDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <Text style={styles.backButtonText}>← Назад</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Детали метки</Text>
-      </View>
 
       <View style={styles.markerInfo}>
+        <View style={styles.titleContainer}>
+          <Text style={styles.markerTitle}>{markerTitle}</Text>
+          <TouchableOpacity style={styles.editButton} onPress={handleEditTitle}>
+            <Text style={styles.editButtonText}>✏️</Text>
+          </TouchableOpacity>
+        </View>
+        
         <Text style={styles.coordinates}>
           Координаты: {latitude.toFixed(6)}, {longitude.toFixed(6)}
         </Text>
@@ -139,9 +178,7 @@ export default function MarkerDetailScreen() {
           </TouchableOpacity>
         </View>
 
-        {loading ? (
-          <ActivityIndicator size="large" color="#007AFF" style={styles.loader} />
-        ) : images.length === 0 ? (
+        {images.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>Нет добавленных изображений</Text>
             <Text style={styles.emptyStateSubtext}>
@@ -155,7 +192,7 @@ export default function MarkerDetailScreen() {
                 <Image source={{ uri: image.uri }} style={styles.image} />
                 <View style={styles.imageInfo}>
                   <Text style={styles.imageDate}>
-                    Добавлено: {image.createdAt.toLocaleDateString()}
+                    Добавлено: {new Date(image.createdAt).toLocaleDateString()}
                   </Text>
                   <TouchableOpacity
                     style={styles.deleteButton}
@@ -169,6 +206,40 @@ export default function MarkerDetailScreen() {
           </ScrollView>
         )}
       </View>
+
+      {/* Модальное окно для редактирования названия */}
+      <Modal
+        visible={isEditingTitle}
+        transparent={true}
+        animationType="slide"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Изменить название метки</Text>
+            <TextInput
+              style={styles.textInput}
+              value={newTitle}
+              onChangeText={setNewTitle}
+              placeholder="Введите новое название"
+              autoFocus={true}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]} 
+                onPress={handleCancelEdit}
+              >
+                <Text style={styles.cancelButtonText}>Отмена</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.saveButton]} 
+                onPress={handleSaveTitle}
+              >
+                <Text style={styles.saveButtonText}>Сохранить</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -211,6 +282,24 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  markerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+  },
+  editButton: {
+    padding: 8,
+  },
+  editButtonText: {
+    fontSize: 18,
+  },
   coordinates: {
     fontSize: 16,
     fontWeight: '600',
@@ -246,9 +335,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     fontSize: 14,
-  },
-  loader: {
-    marginTop: 32,
   },
   emptyState: {
     backgroundColor: 'white',
@@ -313,5 +399,61 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     textAlign: 'center',
     margin: 16,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    width: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#f0f0f0',
+  },
+  saveButton: {
+    backgroundColor: '#007AFF',
+  },
+  cancelButtonText: {
+    color: '#333',
+    fontWeight: '600',
+  },
+  saveButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
 });
