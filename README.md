@@ -19,8 +19,9 @@
 - Expo Image Picker
 - Expo Router
 
-## Установка и запуск
+## Запуск
 
-1. Установите зависимости:
-```bash
+git clone https://github.com/mizzzzord/Map-App-1.git
+cd Map
 npm install
+npx expo start
